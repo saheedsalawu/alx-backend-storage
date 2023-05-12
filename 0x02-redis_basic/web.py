@@ -1,38 +1,57 @@
 #!/usr/bin/env python3
-'''A module with tools for request caching and tracking.
-'''
+
+"""
+This module provides the class Cache
+"""
+
+from functools import wraps
 import redis
 import requests
-from functools import wraps
-from typing import Callable
+import requests_html
+import typing
 
 
-redis_store = redis.Redis()
-'''The module-level Redis instance.
-'''
+def counter(method: typing.Callable):
+    """
+    Counts the calls to the input method
+    """
 
-
-def data_cacher(method: Callable) -> Callable:
-    '''Caches the output of fetched data.
-    '''
     @wraps(method)
-    def invoker(url) -> str:
-        '''The wrapper function for caching the output.
-        '''
-        redis_store.incr(f'count:{url}')
-        result = redis_store.get(f'result:{url}')
-        if result:
-            return result.decode('utf-8')
-        result = method(url)
-        redis_store.set(f'count:{url}', 0)
-        redis_store.setex(f'result:{url}', 10, result)
-        return result
-    return invoker
+    def count(self, url: str, *args, **kwargs) -> typing.Callable:
+        """
+        Caches the counts of visits to url
+        """
+        key = 'count:' + url
+        self._redis.incr(key)
+        self._redis.expire(key, 10)
+        return counter(url, *args, **kwargs)
+    return count
 
 
-@data_cacher
-def get_page(url: str) -> str:
-    '''Returns the content of a URL after caching the request's response,
-    and tracking the request.
-    '''
-    return requests.get(url).text
+class Cache:
+    """
+    This class queries a webpage and monitors the number of visits to it
+    """
+
+    def __init__(self):
+        """
+        Initialize class
+        """
+        self._redis = redis.Redis()
+        self._redis.flushdb()
+
+    @counter
+    def get_page(self, url: str) -> str:
+        """
+        This function ses the requests module to obtain
+        the HTML content of a particular URL and returns it
+        """
+        response = requests.get(url)
+        return response.text
+
+
+if __name__ == '__main__':
+    url = 'http://www.google.com'
+    cache = Cache()
+    print(cache)
+    cache.get_page(url)
